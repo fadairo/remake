@@ -125,6 +125,9 @@ export async function ship(proj, opts = {}) {
   else gcloud(inProject(["secrets", "create", secret, "--replication-policy=automatic", "--data-file=-"]), { cwd: root, input: passcode });
   const number = gcloud(["projects", "describe", project, "--format=value(projectNumber)"], { cwd: root }).stdout.trim();
   gcloud(inProject(["secrets", "add-iam-policy-binding", secret, `--member=serviceAccount:${number}-compute@developer.gserviceaccount.com`, "--role=roles/secretmanager.secretAccessor", "--quiet"]), { cwd: root });
+  // New projects don't let the default service account build from source: give it the Cloud Run Builder role.
+  const builder = gcloud(["projects", "add-iam-policy-binding", project, `--member=serviceAccount:${number}-compute@developer.gserviceaccount.com`, "--role=roles/run.builder", "--condition=None", "--quiet"], { cwd: root, allowFail: true });
+  if (!builder.ok) warn(`Couldn't give the build account the Cloud Run Builder role (you may not be an owner of ${project}). The deploy may fail with a permissions error.`);
   // The passcode gate in server.js is the lock, so Google's own sign-in is off for this service.
   const dep = gcloud(inProject(["run", "deploy", service, "--source", ".", "--region", region, "--allow-unauthenticated", "--set-secrets", `REMAKE_PASSCODE=${secret}:latest`, "--memory", "512Mi", "--quiet"]), { cwd: root, allowFail: true });
   if (!dep.ok) throw new RemakeError(`gcloud run deploy failed:\n${dep.out.trim().slice(-1500)}`);
