@@ -6,7 +6,7 @@ import { ENGINE_ROOT } from "./project.mjs";
 
 const has = (cmd, args = ["--version"]) => {
   const r = spawnSync(cmd, args, { encoding: "utf8" });
-  return { ok: !r.error && r.status === 0, out: `${r.stdout || ""}${r.stderr || ""}`.trim() };
+  return { ok: !r.error && r.status === 0, out: `${r.stdout || ""}${r.stderr || ""}`.trim(), stdout: (r.stdout || "").trim() };
 };
 
 export async function doctor({ fix = false } = {}) {
@@ -31,10 +31,10 @@ export async function doctor({ fix = false } = {}) {
   if (!gcloud.ok) todo.push(["Google Cloud CLI", "Install it from https://cloud.google.com/sdk/docs/install (macOS: `brew install --cask google-cloud-sdk`)."]);
   else {
     const acct = has("gcloud", ["auth", "list", "--filter=status:ACTIVE", "--format=value(account)"]);
-    const who = acct.ok ? acct.out.trim().split("\n")[0] : "";
+    const who = acct.ok ? acct.stdout.split("\n")[0] : "";
     who ? ok(`Google Cloud CLI, signed in as ${who}`) : todo.push(["Google Cloud sign-in", "Run `gcloud auth login` and click through once in your browser."]);
     const proj = has("gcloud", ["config", "get-value", "project"]);
-    const id = proj.ok ? proj.out.trim().split("\n").pop() : "";
+    const id = proj.ok ? proj.stdout.split("\n").pop() : "";
     if (who && (!id || id === "(unset)") && !process.env.REMAKE_GCP_PROJECT) todo.push(["Google Cloud project", "Run `gcloud config set project <project-id>`, or pass `--project` to `remake ship`."]);
   }
 
