@@ -1,11 +1,10 @@
 // Doctor: is everything installed and signed in? With --fix, installs what can be installed.
-import { spawnSync } from "node:child_process";
 import { chromium } from "playwright";
-import { say, ok, warn, step } from "./util.mjs";
+import { say, ok, warn, step, runCmd } from "./util.mjs";
 import { ENGINE_ROOT } from "./project.mjs";
 
 const has = (cmd, args = ["--version"]) => {
-  const r = spawnSync(cmd, args, { encoding: "utf8" });
+  const r = runCmd(cmd, args, { encoding: "utf8" });
   return { ok: !r.error && r.status === 0, out: `${r.stdout || ""}${r.stderr || ""}`.trim(), stdout: (r.stdout || "").trim() };
 };
 
@@ -20,7 +19,7 @@ export async function doctor({ fix = false } = {}) {
   let gh = has("gh");
   if (!gh.ok && fix && has("brew").ok) {
     say("  installing GitHub CLI…");
-    spawnSync("brew", ["install", "gh"], { stdio: "inherit" });
+    runCmd("brew", ["install", "gh"], { stdio: "inherit" });
     gh = has("gh");
   }
   if (!gh.ok) todo.push(["GitHub CLI", "macOS: `brew install gh`. Others: https://cli.github.com"]);
@@ -46,7 +45,7 @@ export async function doctor({ fix = false } = {}) {
   } catch {}
   if (!browserOk && fix) {
     say("  downloading Chromium for Playwright (about 150 MB, once)…");
-    spawnSync("npx", ["playwright", "install", "chromium"], { stdio: "inherit", cwd: ENGINE_ROOT });
+    runCmd("npx", ["playwright", "install", "chromium"], { stdio: "inherit", cwd: ENGINE_ROOT });
     try {
       const b = await chromium.launch();
       await b.close();

@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { spawnSync } from "node:child_process";
 
 export const VERSION = "0.1.0";
 export const UA_SUFFIX = `Remake/${VERSION} (+https://github.com/rubenhassid1/remake)`;
@@ -189,4 +190,12 @@ export function isBinary(buf) {
   const n = Math.min(buf.length, 8192);
   for (let i = 0; i < n; i++) if (buf[i] === 0) return true;
   return false;
+}
+
+// spawnSync that also finds Windows commands like gcloud and npx, which are .cmd files Node can't start
+// without a shell. On Windows the command goes through the shell with each argument quoted.
+export function runCmd(cmd, args = [], opts = {}) {
+  if (process.platform !== "win32") return spawnSync(cmd, args, opts);
+  const quote = (a) => (/^[\w@%+=:,./\\-]+$/.test(a) ? a : `"${String(a).replace(/"/g, '\\"')}"`);
+  return spawnSync([cmd, ...args].map(quote).join(" "), { ...opts, shell: true });
 }

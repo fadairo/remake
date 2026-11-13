@@ -2,15 +2,14 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
 import { copyTemplates } from "./project.mjs";
-import { RemakeError, say, ok, warn, step, readJson, writeJson } from "./util.mjs";
+import { RemakeError, say, ok, warn, step, readJson, writeJson, runCmd } from "./util.mjs";
 
 const DEFAULT_REGION = "us-central1";
 const APIS = ["run.googleapis.com", "cloudbuild.googleapis.com", "artifactregistry.googleapis.com", "secretmanager.googleapis.com"];
 
 export function sh(cmd, args, { cwd, input, allowFail = false } = {}) {
-  const r = spawnSync(cmd, args, { cwd, input, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  const r = runCmd(cmd, args, { cwd, input, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
   const out = `${r.stdout || ""}${r.stderr || ""}`;
   if (r.error) {
     if (allowFail) return { ok: false, out: r.error.message, code: -1 };
