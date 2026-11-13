@@ -58,23 +58,33 @@ export async function newContext(browser, vp) {
 }
 
 // Tracks in-flight requests so virtual time only moves once the network is quiet.
+// Requests that have been pending longer than this are treated as stalled and no longer waited for,
+// so one request that never finishes can't make every later wait run to its limit.
+const STALLED_MS = 5000;
+
 export function networkTracker(page) {
-  const pending = new Set();
+  const pending = new Map();
   const quiet = (req) => {
     const t = req.resourceType();
     return t === "media" || t === "websocket" || t === "eventsource" || t === "ping";
   };
-  page.on("request", (r) => !quiet(r) && pending.add(r));
+  const live = () => {
+    const now = Date.now();
+    let n = 0;
+    for (const started of pending.values()) if (now - started < STALLED_MS) n++;
+    return n;
+  };
+  page.on("request", (r) => !quiet(r) && pending.set(r, Date.now()));
   page.on("requestfinished", (r) => pending.delete(r));
   page.on("requestfailed", (r) => pending.delete(r));
   return {
     get count() {
-      return pending.size;
+      return live();
     },
     async idle(maxMs = 4000) {
       const until = Date.now() + maxMs;
-      while (pending.size > 0 && Date.now() < until) await new Promise((r) => setTimeout(r, 25));
-      return pending.size === 0;
+      while (live() > 0 && Date.now() < until) await new Promise((r) => setTimeout(r, 25));
+      return live() === 0;
     },
   };
 }
