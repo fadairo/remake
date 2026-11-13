@@ -3,10 +3,8 @@
   "private": true,
   "type": "module",
   "description": "Remake of {{url}}, made with github.com/rubenhassid1/remake",
+  "engines": { "node": ">=20" },
   "scripts": {
-    "build": "node -e \"console.log('Static site: nothing to build. Files are in site/.')\""
-  },
-  "dependencies": {
-    "@vercel/functions": "^3.1.0"
+    "start": "node server.js"
   }
 }

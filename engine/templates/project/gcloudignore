@@ -1,0 +1,6 @@
+# gcloud run deploy --source uploads this folder. Only server.js, package.json, Dockerfile and site/ are needed.
+.git
+.gitignore
+node_modules
+remake
+*.md

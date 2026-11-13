@@ -124,7 +124,7 @@ export async function initProject(url, opts = {}) {
 export function copyTemplates(root, vars) {
   const src = path.join(TEMPLATES, "project");
   for (const file of fs.readdirSync(src)) {
-    const to = path.join(root, file === "gitignore" ? ".gitignore" : file);
+    const to = path.join(root, ({ gitignore: ".gitignore", dockerignore: ".dockerignore", gcloudignore: ".gcloudignore" })[file] || file);
     if (fs.existsSync(to)) continue;
     let text = fs.readFileSync(path.join(src, file), "utf8");
     for (const [k, v] of Object.entries(vars)) text = text.replaceAll(`{{${k}}}`, v);

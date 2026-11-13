@@ -1,11 +1,13 @@
-// Ship: a private GitHub repo and a live Vercel site behind a passcode, then check the gate works.
+// Ship: a private GitHub repo and a live Google Cloud Run site behind a passcode, then check the gate works.
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { copyTemplates } from "./project.mjs";
-import { MOVED_IMMUTABLE } from "./serve.mjs";
 import { RemakeError, say, ok, warn, step, readJson, writeJson } from "./util.mjs";
+
+const DEFAULT_REGION = "us-central1";
+const APIS = ["run.googleapis.com", "cloudbuild.googleapis.com", "artifactregistry.googleapis.com", "secretmanager.googleapis.com"];
 
 export function sh(cmd, args, { cwd, input, allowFail = false } = {}) {
   const r = spawnSync(cmd, args, { cwd, input, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
@@ -18,35 +20,14 @@ export function sh(cmd, args, { cwd, input, allowFail = false } = {}) {
   return { ok: r.status === 0, out, stdout: r.stdout || "", code: r.status };
 }
 
-// The team the Vercel CLI is switched to (marked ✔ in `vercel teams ls`), so link never stops to ask.
-function currentVercelScope() {
-  const r = sh("vercel", ["teams", "ls"], { allowFail: true });
-  if (!r.ok) return null;
-  const lines = r.out.split("\n");
-  const marked = lines.find((l) => l.includes("✔"));
-  if (marked) return marked.replace("✔", "").trim().split(/\s+/)[0];
-  const head = lines.findIndex((l) => /^\s*id\s+/i.test(l));
-  const teams = lines.slice(head + 1).map((l) => l.trim().split(/\s+/)[0]).filter((t) => t && /^[a-z0-9-]+$/.test(t));
-  return teams.length === 1 ? teams[0] : null;
+// Cloud Run service and secret names: lowercase letters, digits and hyphens, starting with a letter.
+function serviceName(name) {
+  const n = name.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40).replace(/-+$/g, "");
+  return /^[a-z]/.test(n) ? n : `remake-${n}`.slice(0, 40).replace(/-+$/g, "");
 }
 
-// Vercel won't deploy a folder at _next/static/immutable (it fails with "Unexpected error"). Move it
-// aside and add a rewrite, so the page still asks for the same addresses.
-function moveReserved(root, site) {
-  const from = path.join(site, "_next", "static", "immutable");
-  const to = path.join(site, "_next", "static", MOVED_IMMUTABLE);
-  if (!fs.existsSync(from) && !fs.existsSync(to)) return;
-  if (fs.existsSync(from)) {
-    if (fs.existsSync(to)) fs.cpSync(from, to, { recursive: true });
-    else fs.renameSync(from, to);
-    fs.rmSync(from, { recursive: true, force: true });
-  }
-  const file = path.join(root, "vercel.json");
-  const vj = readJson(file, {}) || {};
-  const rule = { source: "/_next/static/immutable/:path*", destination: `/_next/static/${MOVED_IMMUTABLE}/:path*` };
-  vj.rewrites = (vj.rewrites || []).filter((r) => r.source !== rule.source).concat(rule);
-  writeJson(file, vj);
-  ok(`moved _next/static/immutable to _next/static/${MOVED_IMMUTABLE} (Vercel keeps that folder for itself), same addresses`);
+function gcloud(args, opts = {}) {
+  return sh("gcloud", args, opts);
 }
 
 function makePasscode(name) {
@@ -55,14 +36,10 @@ function makePasscode(name) {
 }
 
 export async function verifyGate(url, passcode, pagePath = "/") {
-  const res = { url, gate: false, unlock: false, page: false, noindex: false, checkpoint: false };
+  const res = { url, gate: false, unlock: false, page: false, noindex: false };
   try {
     const a = await fetch(url, { redirect: "manual" });
     const body = await a.text();
-    if (a.status === 403 && /Vercel Security Checkpoint/i.test(body)) {
-      res.checkpoint = true;
-      return res;
-    }
     res.gate = a.status === 401 && body.includes("data-remake-gate");
     res.noindex = /noindex/i.test(a.headers.get("x-robots-tag") || "");
     const form = new URLSearchParams({ passcode, next: "/" });
@@ -85,8 +62,8 @@ export async function verifyGate(url, passcode, pagePath = "/") {
   return res;
 }
 
-export async function ship(project, opts = {}) {
-  const { cfg, p, root } = project;
+export async function ship(proj, opts = {}) {
+  const { cfg, p, root } = proj;
   const score = readJson(p.score);
   if (!score) warn("No score yet: shipping anyway, but the report won't pass until `remake score` passes.");
   else if (!score.pass) warn("The score doesn't pass yet. Shipping anyway so you can look at it; the report will say what's left.");
@@ -96,18 +73,26 @@ export async function ship(project, opts = {}) {
   if (first !== "/" && !fs.existsSync(path.join(p.site, "index.html"))) {
     fs.writeFileSync(path.join(p.site, "index.html"), `<!doctype html><meta charset="utf-8"><meta name="robots" content="noindex, nofollow"><meta http-equiv="refresh" content="0;url=${first}"><link rel="canonical" href="${first}"><title>Redirecting</title><a href="${first}">Continue</a>`);
   }
-  moveReserved(root, p.site);
   const prev = readJson(p.ship, {}) || {};
   const name = opts.name || prev.name || `remake-${cfg.name}`.slice(0, 90);
   const passcode = opts.passcode || prev.passcode || makePasscode(cfg.name);
+  const service = serviceName(name);
+  const secret = `${service}-passcode`;
 
-  step("Checking you're signed in to GitHub and Vercel");
+  step("Checking you're signed in to GitHub and Google Cloud");
   if (!sh("gh", ["auth", "status"], { allowFail: true }).ok) {
     throw new RemakeError("GitHub CLI isn't signed in.", "Run `gh auth login --web` and click through once in your browser.");
   }
-  const who = sh("vercel", ["whoami"], { allowFail: true });
-  if (!who.ok) throw new RemakeError("Vercel CLI isn't signed in.", "Run `vercel login` and click through once in your browser.");
-  ok(`GitHub and Vercel (${who.stdout.trim().split("\n").pop()})`);
+  const account = gcloud(["auth", "list", "--filter=status:ACTIVE", "--format=value(account)"], { allowFail: true });
+  if (!account.ok || !account.stdout.trim()) {
+    throw new RemakeError("The gcloud CLI isn't signed in.", "Run `gcloud auth login` and click through once in your browser.");
+  }
+  const project = opts.project || process.env.REMAKE_GCP_PROJECT || prev.project || gcloud(["config", "get-value", "project"], { allowFail: true }).stdout.trim();
+  if (!project || project === "(unset)") {
+    throw new RemakeError("No Google Cloud project chosen.", "Run `remake ship --project <project-id>`, or set REMAKE_GCP_PROJECT.");
+  }
+  const region = opts.region || process.env.REMAKE_GCP_REGION || prev.region || DEFAULT_REGION;
+  ok(`GitHub and Google Cloud (${account.stdout.trim().split("\n")[0]}, project ${project}, ${region})`);
 
   step("Saving to a private GitHub repo");
   if (!fs.existsSync(path.join(root, ".git"))) sh("git", ["init", "-b", "main"], { cwd: root });
@@ -132,56 +117,41 @@ export async function ship(project, opts = {}) {
   if (visibility && visibility !== "PRIVATE") warn(`The repo is ${visibility.toLowerCase()}. A remake should stay private until it's yours.`);
   ok(repoUrl);
 
-  step("Deploying to Vercel behind a passcode");
-  const scope = opts.scope || process.env.REMAKE_VERCEL_SCOPE || prev.scope || currentVercelScope();
-  const scoped = (args) => (scope ? [...args, "--scope", scope] : args);
-  sh("vercel", scoped(["link", "--yes", "--project", name]), { cwd: root });
-  sh("vercel", scoped(["env", "rm", "REMAKE_PASSCODE", "production", "--yes"]), { cwd: root, allowFail: true });
-  sh("vercel", scoped(["env", "add", "REMAKE_PASSCODE", "production"]), { cwd: root, input: passcode });
-  let dep = sh("vercel", scoped(["deploy", "--prod", "--yes"]), { cwd: root, allowFail: true });
-  if (!dep.ok && /Git author .* must have access/i.test(dep.out)) {
-    // Vercel only deploys commits whose author is on the team: re-sign the last commit with the Vercel account's email.
-    const user = JSON.parse(sh("vercel", ["api", "/v2/user"], { cwd: root, allowFail: true }).stdout || "{}").user || {};
-    if (user.email) {
-      warn(`Vercel wants the commit author to be ${user.email}; re-signing the last commit with it.`);
-      sh("git", ["config", "user.email", user.email], { cwd: root });
-      sh("git", ["commit", "--amend", "--reset-author", "--no-edit"], { cwd: root });
-      sh("git", ["push", "--force-with-lease", "-u", "origin", "HEAD"], { cwd: root });
-      dep = sh("vercel", scoped(["deploy", "--prod", "--yes"]), { cwd: root, allowFail: true });
-    }
-  }
-  if (!dep.ok) throw new RemakeError(`vercel deploy failed:\n${dep.out.trim().slice(-1500)}`);
-  const urls = [...dep.out.matchAll(/https:\/\/[^\s"'\]]+\.vercel\.app/g)].map((m) => m[0]);
-  const aliased = /Aliased:\s*(https:\/\/\S+)/.exec(dep.out)?.[1];
-  const deployment = dep.stdout.trim().split("\n").filter((l) => l.startsWith("https://")).pop() || urls[0];
-  let url = aliased || null;
-  if (!url) {
-    const inspect = sh("vercel", ["inspect", deployment], { cwd: root, allowFail: true });
-    const alias = [...inspect.out.matchAll(/https:\/\/[^\s]+\.vercel\.app/g)].map((m) => m[0]).filter((u) => u !== deployment);
-    url = alias.sort((a, b) => a.length - b.length)[0] || deployment;
-  }
+  step("Deploying to Google Cloud Run behind a passcode");
+  const inProject = (args) => [...args, "--project", project];
+  gcloud(inProject(["services", "enable", ...APIS]), { cwd: root });
+  // The passcode lives in Secret Manager; Cloud Run reads it as REMAKE_PASSCODE.
+  const exists = gcloud(inProject(["secrets", "describe", secret]), { cwd: root, allowFail: true }).ok;
+  if (exists) gcloud(inProject(["secrets", "versions", "add", secret, "--data-file=-"]), { cwd: root, input: passcode });
+  else gcloud(inProject(["secrets", "create", secret, "--replication-policy=automatic", "--data-file=-"]), { cwd: root, input: passcode });
+  const number = gcloud(["projects", "describe", project, "--format=value(projectNumber)"], { cwd: root }).stdout.trim();
+  gcloud(inProject(["secrets", "add-iam-policy-binding", secret, `--member=serviceAccount:${number}-compute@developer.gserviceaccount.com`, "--role=roles/secretmanager.secretAccessor", "--quiet"]), { cwd: root });
+  // The passcode gate in server.js is the lock, so Google's own sign-in is off for this service.
+  const dep = gcloud(inProject(["run", "deploy", service, "--source", ".", "--region", region, "--allow-unauthenticated", "--set-secrets", `REMAKE_PASSCODE=${secret}:latest`, "--memory", "512Mi", "--quiet"]), { cwd: root, allowFail: true });
+  if (!dep.ok) throw new RemakeError(`gcloud run deploy failed:\n${dep.out.trim().slice(-1500)}`);
+  const url =
+    gcloud(inProject(["run", "services", "describe", service, "--region", region, "--format=value(status.url)"]), { cwd: root, allowFail: true }).stdout.trim() ||
+    /Service URL:\s*(https:\/\/\S+)/.exec(dep.out)?.[1];
+  if (!url) throw new RemakeError("The deploy worked but Cloud Run gave no address.", `Run \`gcloud run services describe ${service} --region ${region} --project ${project}\`.`);
   ok(`deployed: ${url}`);
-  // `vercel link` may add .vercel to .gitignore: keep the repo in step with what was deployed.
+  // Keep the repo in step with anything the deploy changed.
   sh("git", ["add", "-A"], { cwd: root });
   if (!sh("git", ["diff", "--cached", "--quiet"], { cwd: root, allowFail: true }).ok) {
-    sh("git", ["commit", "-m", "Vercel project link"], { cwd: root });
+    sh("git", ["commit", "-m", "Deploy config"], { cwd: root });
     sh("git", ["push", "-u", "origin", "HEAD"], { cwd: root });
   }
 
   step("Checking the passcode gate");
   const check = await verifyGate(url, passcode, first);
   let verified = "no";
-  if (check.checkpoint) {
-    verified = "checkpoint";
-    warn("Vercel's bot check answered the scripted test. Open the link in a browser to confirm the gate.");
-  } else if (check.gate && check.unlock && check.page) {
+  if (check.gate && check.unlock && check.page) {
     verified = "yes";
     ok(`locked without the passcode, open with it${check.noindex ? ", hidden from search engines" : ""}`);
   } else {
     warn(`gate check: ${JSON.stringify(check)}`);
   }
   const head = sh("git", ["rev-parse", "HEAD"], { cwd: root }).stdout.trim();
-  const shipInfo = { name, scope, repo: repoUrl, visibility, url, deployment, passcode, verified, check, commit: head, at: new Date().toISOString() };
+  const shipInfo = { name, project, region, service, secret, repo: repoUrl, visibility, url, passcode, verified, check, commit: head, at: new Date().toISOString() };
   writeJson(p.ship, shipInfo);
   say(`\n  Live:     ${url}\n  Passcode: ${passcode}\n  Repo:     ${repoUrl} (${(visibility || "private").toLowerCase()})\n  Proof:    ${url}/_remake/\n  Swap:     ${url}/_remake/swap/`);
   say("\nNext: remake report");
