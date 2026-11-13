@@ -6,7 +6,7 @@
 
 By [Ruben Hassid](https://ruben.substack.com), from the newsletter [How to AI](https://ruben.substack.com).
 
-One line in Claude Code turns a URL into a copy that matches the original on every screen, puts it live on **your** GitHub and **your** Vercel behind a passcode, and hands you a swap board of every text, photo, video, font and logo to replace so the site becomes yours.
+One line in Claude Code turns a URL into a copy that matches the original on every screen, puts it live on **your** GitHub and **your** Google Cloud behind a passcode, and hands you a swap board of every text, photo, video, font and logo to replace so the site becomes yours.
 
 </div>
 
@@ -33,7 +33,7 @@ Change the URL. That's the whole prompt.
 
 | | |
 | --- | --- |
-| **A live site** | On your Vercel, behind a passcode, hidden from search engines. |
+| **A live site** | On your Google Cloud Run, behind a passcode, hidden from search engines. |
 | **A private repo** | On your GitHub, with the whole site in `site/`. |
 | **A proof page** | `/_remake/` on your site: the original and the remake side by side, drag to compare, a score on every screen. |
 | **A swap board** | `/_remake/swap/`: every piece that still belongs to the original, grouped (copy, photos, videos, logos, fonts, colours, links and forms, and more), with what Claude needs from you for each. |
@@ -46,14 +46,14 @@ Change the URL. That's the whole prompt.
  visit once ──► record everything ──► write site/ ──► freeze time ──► score every screen + motion
                                                            ▲                     │
                                                            └──── repair ◄────────┘ (until it passes)
- ship (GitHub + Vercel + passcode) ──► report: REMAKE COMPLETE ──► swap board ──► make it yours
+ ship (GitHub + Cloud Run + passcode) ──► report: REMAKE COMPLETE ──► swap board ──► make it yours
 ```
 
 1. **Visit once.** A browser opens the page at desktop size, then at phone size, scrolls to the bottom and back, and keeps every response: HTML, CSS, scripts, fonts, images, and the answers to the API calls the page made. From then on, everything is replayed from that recording. Two page loads, then the files they point to, one at a time with a pause between each.
 2. **Write the site.** The recording becomes a folder you own. Addresses are rewritten so every file loads from your copy, trackers are removed, other image sizes are fetched one at a time, and a small runtime answers the page's API calls from the recording.
 3. **Freeze time and score.** This is the part nothing else does. A live page never looks the same twice: intro animations, WebGL noise, random headlines, autoplay video. So Remake stops the page's clock before its first script runs, gives every bit of code that asks for a random number the same answers, holds every video on its first frame, puts the browser's own animations (`element.animate`) on that same paused clock, and moves time forward itself in exact steps. Load the same page twice this way and you get the same pixels twice, so the remake can be measured against the original to the pixel: every screen at desktop and phone (up to 40 per page), plus 24 frames of scrolling motion. Whatever still changes between two loads of the original (a live map, a clock) is left out of the score and shown in blue.
 4. **Repair.** Claude reads the diff images, opens the remake, fetches what's missing and fixes what's broken, until every screen passes: 98% of stable pixels per screen, 95% per motion frame, page heights within 4 px.
-5. **Ship.** Private GitHub repo, Vercel deploy, passcode gate, then a check from outside that the gate holds.
+5. **Ship.** Private GitHub repo, Cloud Run deploy, passcode gate, then a check from outside that the gate holds.
 6. **Make it yours.** Every slot of the original goes into `remake/content.json` with where it lives in the files. Send Claude your photos, your About page, your logo and links; it fills the slots in your voice, at the same length so the layout holds, crops your photos to every size the site uses, and serves a free look-alike font under the original font's name so no CSS changes.
 
 ## What's new here
@@ -63,7 +63,7 @@ Other cloners redraw a site from screenshots and then eyeball it. Remake does si
 - **It copies; it doesn't redraw.** The original's own markup, styles and scripts run in your copy, so smooth scroll, text effects, WebGL and sliders come with it.
 - **It freezes time to measure.** Paused clock (browser animations included), seeded randomness per line of code, held video, and a noise mask from two loads of the original. A score you can trust on animated, WebGL-heavy sites.
 - **It scores motion,** not only still screens.
-- **It ends live and private,** on your GitHub and Vercel, with the gate checked.
+- **It ends live and private,** on your GitHub and Google Cloud, with the gate checked.
 - **It makes the site yours,** with a swap board and an `apply` that keeps the layout intact.
 - **It never feeds their photos to a generator.** Remake measures every picture (shape, colours, light), Claude writes what yours should show, and Codex on your ChatGPT plan generates it in the same frame and mood. No ChatGPT? Free public-domain stock, then generated art. Every image is credited.
 
@@ -93,7 +93,7 @@ remake capture && remake score
 
 | Command | What it does |
 | --- | --- |
-| `remake doctor [--fix]` | Checks Node, git, GitHub and Vercel sign-in and Chromium; installs what it can. |
+| `remake doctor [--fix]` | Checks Node, git, GitHub and Google Cloud sign-in and Chromium; installs what it can. |
 | `remake status` | Where the project stands and the next command to run. |
 | `remake init <url> [--pages N] [--dir path]` | Starts a project in `~/remakes/<site>`. `--pages 6` remakes the home page plus up to 5 pages from its navigation. |
 | `remake capture [--archive [timestamp]] [--fresh]` | Visits once, writes the site into `site/`. `--archive` rebuilds from the Internet Archive's copy; `--fresh` records again. |
@@ -105,10 +105,10 @@ remake capture && remake score
 | `remake images` / `remake images --make` | Measures every picture that still belongs to the original, then makes new ones: Codex on your ChatGPT plan, an API key, free stock or generated art. |
 | `remake apply [--force]` | Puts your swaps into the site. |
 | `remake board` | Builds the proof page, the swap board and `MAKE-IT-YOURS.md`. |
-| `remake ship [--name repo] [--passcode CODE] [--scope team]` | Private GitHub repo, Vercel deploy behind a passcode, gate check. Running it again keeps the passcode on. |
+| `remake ship [--name repo] [--passcode CODE] [--project gcp-id] [--region us-central1]` | Private GitHub repo, Cloud Run deploy behind a passcode (kept in Secret Manager), gate check. Running it again keeps the passcode on. |
 | `remake report` | Every gate in one table, ending in REMAKE COMPLETE or what's left. |
 
-You need Claude Code, Node 20 or newer, git, the GitHub CLI and free GitHub and Vercel accounts (`remake doctor --fix` installs the GitHub and Vercel command-line tools; on a Mac without Homebrew, install the GitHub CLI from cli.github.com). The first run downloads Chromium for Playwright (about 150 MB). If `npm install -g` fails with a permissions error, run the tool as `node ~/.remake/engine/bin/remake.mjs` instead. Signing in to GitHub and Vercel is one click each in your browser; Claude starts both.
+You need Claude Code, Node 20 or newer, git, the GitHub CLI and a free GitHub account, and a Google Cloud project with billing on plus the `gcloud` CLI (install it from cloud.google.com/sdk; `remake doctor` checks both; on a Mac without Homebrew, install the GitHub CLI from cli.github.com). The first run downloads Chromium for Playwright (about 150 MB). If `npm install -g` fails with a permissions error, run the tool as `node ~/.remake/engine/bin/remake.mjs` instead. Signing in to GitHub and Google Cloud is one click each in your browser; Claude starts both.
 
 ## What it won't do
 

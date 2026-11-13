@@ -27,16 +27,15 @@ export async function doctor({ fix = false } = {}) {
   else if (!has("gh", ["auth", "status"]).ok) todo.push(["GitHub sign-in", "Run `gh auth login --web` and click through once in your browser."]);
   else ok("GitHub CLI, signed in");
 
-  let vercel = has("vercel");
-  if (!vercel.ok && fix) {
-    say("  installing Vercel CLI…");
-    spawnSync("npm", ["install", "-g", "vercel"], { stdio: "inherit" });
-    vercel = has("vercel");
-  }
-  if (!vercel.ok) todo.push(["Vercel CLI", "Run `npm install -g vercel`."]);
+  const gcloud = has("gcloud");
+  if (!gcloud.ok) todo.push(["Google Cloud CLI", "Install it from https://cloud.google.com/sdk/docs/install (macOS: `brew install --cask google-cloud-sdk`)."]);
   else {
-    const who = has("vercel", ["whoami"]);
-    who.ok ? ok(`Vercel CLI, signed in as ${who.out.split("\n").pop()}`) : todo.push(["Vercel sign-in", "Run `vercel login` and click through once in your browser."]);
+    const acct = has("gcloud", ["auth", "list", "--filter=status:ACTIVE", "--format=value(account)"]);
+    const who = acct.ok ? acct.out.trim().split("\n")[0] : "";
+    who ? ok(`Google Cloud CLI, signed in as ${who}`) : todo.push(["Google Cloud sign-in", "Run `gcloud auth login` and click through once in your browser."]);
+    const proj = has("gcloud", ["config", "get-value", "project"]);
+    const id = proj.ok ? proj.out.trim().split("\n").pop() : "";
+    if (who && (!id || id === "(unset)") && !process.env.REMAKE_GCP_PROJECT) todo.push(["Google Cloud project", "Run `gcloud config set project <project-id>`, or pass `--project` to `remake ship`."]);
   }
 
   let browserOk = false;

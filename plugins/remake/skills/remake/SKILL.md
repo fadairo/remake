@@ -1,11 +1,11 @@
 ---
 name: remake
-description: Remake any website pixel for pixel with the Remake engine, ship it to the user's private GitHub repo and Vercel behind a passcode, then build the swap board that makes it theirs. Use when someone asks to remake, clone, copy, rebuild or reverse-engineer a website or landing page, wants "this site, but mine", or sends "/goal Remake <url> with github.com/rubenhassid1/remake …".
+description: Remake any website pixel for pixel with the Remake engine, ship it to the user's private GitHub repo and Google Cloud Run behind a passcode, then build the swap board that makes it theirs. Use when someone asks to remake, clone, copy, rebuild or reverse-engineer a website or landing page, wants "this site, but mine", or sends "/goal Remake <url> with github.com/rubenhassid1/remake …".
 ---
 
 # Remake
 
-Turn a URL into a working copy that matches the original on every screen, put it live on the user's own GitHub and Vercel (private, passcode, hidden from search engines), then hand them a swap board listing every text, photo, video, font, logo and link to replace so the site becomes theirs.
+Turn a URL into a working copy that matches the original on every screen, put it live on the user's own GitHub and Google Cloud (private, passcode, hidden from search engines), then hand them a swap board listing every text, photo, video, font, logo and link to replace so the site becomes theirs.
 
 The finish line is the last line of `remake report`: **REMAKE COMPLETE**. Under `/goal`, the judge only reads this conversation, so paste the full report output into the chat every time you run it.
 
@@ -20,7 +20,7 @@ remake doctor --fix
 
 If the global install isn't allowed on this machine, use `node ~/.remake/engine/bin/remake.mjs` wherever this skill says `remake`. Shell aliases don't survive between tool calls, so don't rely on one.
 
-`doctor --fix` installs Chromium for Playwright and the Vercel CLI. If GitHub or Vercel isn't signed in, run `gh auth login --web` or `vercel login` yourself and tell the user, in one sentence, that a browser tab opened and they should click Authorize. That is the only thing the user does.
+`doctor --fix` installs Chromium for Playwright. If GitHub or Google Cloud isn't signed in, run `gh auth login --web` or `gcloud auth login` yourself and tell the user, in one sentence, that a browser tab opened and they should click Authorize. That is the only thing the user does.
 
 ## 1. Refuse what Remake is not for
 
@@ -42,7 +42,7 @@ A private remake of a public marketing page, to learn from or to turn into your 
    - Fix files in `site/` directly, then re-score only what you touched: `remake score --page / --viewport phone --no-motion`. Run the full `remake score` before shipping.
    - Known causes and fixes: [references/fixing.md](references/fixing.md). After two failed attempts on the same screen, ask the `remake-judge` agent for a fresh read.
 5. **List what's theirs.** `remake slots` writes `remake/content.json`, then `remake board` builds the proof page (`/_remake/`), the swap board (`/_remake/swap/`) and `MAKE-IT-YOURS.md`.
-6. **Ship.** `remake ship`. Private GitHub repo, Vercel deploy, passcode in the `REMAKE_PASSCODE` variable, gate checked from outside. The user's request to put it on their GitHub and Vercel is the go-ahead; don't ask again. Never make the repo public or remove the passcode unless the user says so.
+6. **Ship.** `remake ship`. Private GitHub repo, Cloud Run deploy (needs `--project <gcp-id>` the first time), passcode in Secret Manager as `REMAKE_PASSCODE`, gate checked from outside. The user's request to put it on their GitHub and Google Cloud is the go-ahead; don't ask again. Never make the repo public or remove the passcode unless the user says so.
 7. **Report.** `remake report`. Paste the whole output. If it says REMAKE NOT DONE, work on what it lists: a change after shipping means score, then ship, then report again.
 
 ## 3. Rules while repairing

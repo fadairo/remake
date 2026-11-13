@@ -1,5 +1,5 @@
 ---
-description: Remake a website pixel for pixel, ship it privately to your GitHub and Vercel, and list what to swap to make it yours.
+description: Remake a website pixel for pixel, ship it privately to your GitHub and Google Cloud, and list what to swap to make it yours.
 argument-hint: <url>
 ---
 

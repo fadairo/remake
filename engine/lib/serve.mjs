@@ -5,9 +5,6 @@ import http from "node:http";
 import path from "node:path";
 import { MIME } from "./util.mjs";
 
-// Vercel keeps /_next/static/immutable/ for itself; a remake serves those files from here instead.
-export const MOVED_IMMUTABLE = "remake-immutable";
-
 export function resolveFile(siteDir, urlPath) {
   let rel;
   try {
@@ -19,8 +16,6 @@ export function resolveFile(siteDir, urlPath) {
   const base = path.join(siteDir, safe);
   if (!base.startsWith(siteDir)) return null;
   const candidates = [base, path.join(base, "index.html"), base + ".html"];
-  // ship moves Next.js's _next/static/immutable aside (Vercel won't deploy that folder): look there too.
-  if (/^[/\\]?_next[/\\]static[/\\]immutable[/\\]/.test(safe)) candidates.push(path.join(siteDir, safe.replace(/immutable/, MOVED_IMMUTABLE)));
   for (const c of candidates) {
     try {
       if (fs.statSync(c).isFile()) return c;

@@ -7,7 +7,7 @@ import { loadProject, initProject } from "../lib/project.mjs";
 
 const HELP = `remake ${VERSION}: remake any website, pixel for pixel, then make it yours.
 
-  remake doctor [--fix]          check Node, git, GitHub, Vercel and Chromium (--fix installs what it can)
+  remake doctor [--fix]          check Node, git, GitHub, Google Cloud and Chromium (--fix installs what it can)
   remake init <url> [--pages N] [--dir path]
                                  start a project (default folder: ~/remakes/<site>)
   remake capture [--archive [timestamp]] [--fresh]
