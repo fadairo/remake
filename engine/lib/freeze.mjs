@@ -112,6 +112,10 @@ export function initScript(seed, { frozen = false } = {}) {
 })();`;
 }
 
+// REMAKE_DEBUG=1 prints timestamped progress, to see which step a slow score is stuck on.
+const T0 = Date.now();
+export const dbg = (msg) => process.env.REMAKE_DEBUG && process.stderr.write(`  [${((Date.now() - T0) / 1000).toFixed(0)}s] ${msg}\n`);
+
 // Open a page with time stopped at a fixed date. Nothing time-based runs until advance().
 export async function openFrozen(browser, url, vp, cfg, { store, archive } = {}) {
   const context = await newContext(browser, vp);
@@ -123,12 +127,16 @@ export async function openFrozen(browser, url, vp, cfg, { store, archive } = {})
   const net = networkTracker(page);
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
+  dbg(`goto ${url}`);
   await page.goto(url, { waitUntil: "load", timeout: 120000 });
+  dbg(`loaded, ${net.count} requests pending`);
   await net.idle(8000);
+  dbg("network settled");
   await Promise.race([
     page.evaluate(() => (document.fonts ? document.fonts.ready.then(() => true) : true)).catch(() => {}),
     new Promise((r) => setTimeout(r, 10000)),
   ]);
+  dbg("fonts ready");
   await page.mouse.move(vp.width / 2, vp.height / 2);
   return { context, page, net, errors };
 }
@@ -172,7 +180,9 @@ export async function parkMedia(page) {
 }
 
 export async function frame(page) {
+  dbg("frame: parking media");
   await parkMedia(page);
+  dbg("frame: screenshot");
   try {
     return await page.screenshot({ animations: "disabled", caret: "hide", scale: "css", timeout: 45000 });
   } catch {
@@ -197,7 +207,9 @@ export async function wheelBy(page, net, dy, { tick = 16, chunk = 100 } = {}) {
 
 // The standard pass: settle, then one frame per screen-height of scroll until the bottom.
 export async function screens(page, net, cfg, vp, { targets } = {}) {
+  dbg("settling");
   await advance(page, net, cfg.settleMs);
+  dbg("settled");
   const m0 = await scrollMetrics(page);
   const height = m0.height;
   const list = targets || [];
@@ -219,6 +231,7 @@ export async function screens(page, net, cfg, vp, { targets } = {}) {
       await advance(page, net, cfg.scrollSettleMs);
     }
     const m = await scrollMetrics(page);
+    dbg(`screen at y=${target} of ${height}`);
     frames.push({ y: target, actualY: m.top, png: await frame(page) });
   }
   return { height, targets: list, frames };
